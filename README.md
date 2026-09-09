@@ -1,65 +1,97 @@
 # AWS S3 Security Monitoring & Alerting Pipeline
 
-Event-driven security monitoring for S3 using AWS CloudTrail, Amazon EventBridge, Amazon SNS, and Amazon CloudWatch — fully provisioned with Terraform.
+Event-driven security monitoring for Amazon S3 using AWS CloudTrail, Amazon EventBridge, Amazon SNS, and Terraform.
 
 ---
 
 ## Overview
 
-This project implements an automated alerting pipeline that detects S3 security-relevant API events (e.g., `PutBucketPublicAccessBlock`) in real time. When a matching event is captured by CloudTrail, EventBridge routes it to an SNS topic which delivers an email notification. CloudWatch logs the event for audit and verification.
+This project implements an event-driven security monitoring and alerting pipeline for Amazon S3. AWS CloudTrail captures S3 API activity, Amazon EventBridge filters security-relevant API events, and Amazon SNS sends email notifications when a matching event occurs.
+
+The EventBridge rule monitors multiple S3 security-related API events, including:
+
+- `PutBucketPublicAccessBlock`
+- `DeletePublicAccessBlock`
+- `PutBucketPolicy`
+- `DeleteBucketPolicy`
+- `PutBucketAcl`
+- `DeleteBucket`
+
+> **Note:** `DeletePublicAccessBlock` is retained here to match the current Terraform configuration in `event-bridge.tf`.
 
 ---
 
 ## Architecture
 
-```
-S3 Bucket
+```text
+Amazon S3
     │
-    │  API Event (e.g., PutBucketPublicAccessBlock)
+    │ S3 API activity
     ▼
-AWS CloudTrail  ──►  Amazon EventBridge  ──►  Amazon SNS  ──►  Email Alert
-                              │
-                              ▼
-                     Amazon CloudWatch (Logs)
+AWS CloudTrail
+    │
+    │ AWS API Call via CloudTrail
+    ▼
+Amazon EventBridge
+    │
+    │ Security-related event matching
+    ▼
+Amazon SNS
+    │
+    ▼
+Email Alert
 ```
-
----
-
-## Tech Stack
-
-| Service | Role |
-|---|---|
-| **AWS S3** | Source bucket being monitored |
-| **AWS CloudTrail** | Captures API activity across the account |
-| **Amazon EventBridge** | Rule-based event routing on CloudTrail events |
-| **Amazon SNS** | Delivers email alerts to subscribers |
-| **Amazon CloudWatch** | Logs and validates triggered events |
-| **Terraform** | Infrastructure as Code — provisions all resources |
 
 ---
 
 ## How It Works
 
-1. **CloudTrail** is enabled and logging S3 data-plane and management events.
-2. An **EventBridge rule** filters for `PutBucketPublicAccessBlock` API calls sourced from CloudTrail.
-3. Matching events are routed to an **SNS topic**.
-4. SNS delivers an **email notification** to the configured subscriber.
-5. A **CloudWatch log group** captures the event for audit trail and verification.
+1. **Amazon S3** is the resource being monitored.
+2. **AWS CloudTrail** captures S3 API activity.
+3. **Amazon EventBridge** evaluates CloudTrail events against a security-focused event pattern.
+4. The rule matches multiple S3 API events related to public access, bucket policies, ACLs, and bucket deletion.
+5. Matching events are sent to an **Amazon SNS topic**.
+6. **Amazon SNS** delivers an email notification to the confirmed subscriber.
+
+---
+
+## Monitored Events
+
+| S3 API Event | Security Relevance |
+|---|---|
+| `PutBucketPublicAccessBlock` | Detects changes to S3 public access block settings |
+| `DeletePublicAccessBlock` | Detects removal of a public access block configuration |
+| `PutBucketPolicy` | Detects bucket policy changes |
+| `DeleteBucketPolicy` | Detects bucket policy removal |
+| `PutBucketAcl` | Detects bucket ACL changes |
+| `DeleteBucket` | Detects bucket deletion |
+
+---
+
+## Tech Stack
+
+| Service / Tool | Role |
+|---|---|
+| **Amazon S3** | Bucket resource being monitored |
+| **AWS CloudTrail** | Captures S3 API activity |
+| **Amazon EventBridge** | Filters and routes matching CloudTrail events |
+| **Amazon SNS** | Sends email security alerts |
+| **Terraform** | Infrastructure as Code and resource provisioning |
+| **AWS CloudWatch** | AWS monitoring and service visibility |
 
 ---
 
 ## Project Structure
 
-```
+```text
 .
-├── main.tf           # Provider configuration
-├── cloudtrail.tf     # CloudTrail trail and S3 log bucket
-├── eventbridge.tf    # EventBridge rule and SNS target
-├── sns.tf            # SNS topic and email subscription
-├── cloudwatch.tf     # CloudWatch log group
-├── variables.tf      # Input variables
-├── outputs.tf        # Output values (SNS ARN, trail ARN, etc.)
-└── terraform.tfvars  # Variable values (not committed)
+├── .gitignore
+├── .terraform.lock.hcl
+├── README.md
+├── s3.tf             # S3 bucket and security configuration
+├── cloudtrail.tf     # CloudTrail trail and logging configuration
+├── event-bridge.tf   # EventBridge security rule and SNS target
+└── sns.tf            # SNS topic, email subscription, and topic policy
 ```
 
 ---
@@ -67,29 +99,36 @@ AWS CloudTrail  ──►  Amazon EventBridge  ──►  Amazon SNS  ──► 
 ## Prerequisites
 
 - AWS account with appropriate IAM permissions
-- Terraform ≥ 1.3
-- AWS CLI configured (`aws configure`)
+- Terraform installed
+- AWS CLI installed and configured
+- A confirmed SNS email subscription
 
 ---
 
 ## Deploy
 
-```bash
-git clone https://github.com/<your-username>/aws-s3-security-monitoring-terraform.git
-cd aws-s3-security-monitoring-terraform
+Clone the repository:
 
+```bash
+git clone https://github.com/SRINILREDDY/AWS-S3-Security-Monitoring-Alerting.git
+cd AWS-S3-Security-Monitoring-Alerting
+```
+
+Initialize and deploy the Terraform configuration:
+
+```bash
 terraform init
 terraform plan
 terraform apply
 ```
 
-After `apply`, confirm the SNS email subscription from your inbox before testing.
+Confirm the SNS subscription from your email before testing alerts.
 
 ---
 
-## Test
+## Test the Alerting Pipeline
 
-Trigger the monitored event manually:
+Trigger a monitored S3 API event. For example, change the bucket's Public Access Block configuration using the AWS CLI:
 
 ```bash
 aws s3api put-public-access-block \
@@ -98,35 +137,54 @@ aws s3api put-public-access-block \
     "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
 ```
 
-Expected outcome:
-- Email notification received via SNS
-- Event visible in CloudWatch Logs
+Expected result:
+
+- CloudTrail records the S3 API event.
+- EventBridge matches the event.
+- EventBridge publishes the event to the SNS topic.
+- SNS sends an email notification to the subscribed email address.
+
+You can repeat the test with other monitored S3 API operations where appropriate.
 
 ---
 
-## Verify in CloudWatch
+## Security Flow
 
-```bash
-aws logs describe-log-groups --log-group-name-prefix "/aws/events/"
-aws logs filter-log-events --log-group-name "<your-log-group>"
+```text
+S3 API Activity
+      ↓
+CloudTrail Audit Event
+      ↓
+EventBridge Event Pattern
+      ↓
+SNS Topic
+      ↓
+Email Notification
 ```
+
+This provides a decoupled, event-driven approach to detecting and alerting on important S3 configuration changes.
 
 ---
 
 ## Cleanup
 
+To remove the Terraform-managed resources:
+
 ```bash
 terraform destroy
 ```
 
-> Note: Unsubscribe from the SNS topic before destroying if the email subscription is still pending.
+If the SNS email subscription is still pending, confirm or unsubscribe it as appropriate before cleanup.
 
 ---
 
 ## Key Concepts Demonstrated
 
-- Event-driven architecture on AWS
-- CloudTrail → EventBridge integration for API-level security monitoring
+- AWS S3 security monitoring
+- AWS CloudTrail API event auditing
+- Amazon EventBridge event pattern matching
+- Amazon SNS email alerting
+- Event-driven architecture
 - Infrastructure as Code with Terraform
-- SNS-based alerting pipeline
-- CloudWatch logging for security audit trails
+- Security-focused cloud monitoring
+- AWS service integration
