@@ -11,9 +11,14 @@ resource "aws_cloudwatch_event_rule" "s3_security" {
       "AWS API Call via CloudTrail"
     ]
 
-    detail = {
+     detail = {
       eventName = [
-        "PutBucketPublicAccessBlock"
+        "PutBucketPublicAccessBlock",
+        "DeletePublicAccessBlock",
+        "PutBucketPolicy",
+        "DeleteBucketPolicy",
+        "PutBucketAcl",
+        "DeleteBucket",
       ]
     }
   })
